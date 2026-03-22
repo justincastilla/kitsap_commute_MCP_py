@@ -5,6 +5,7 @@
 Static list of Washington State Ferry terminals with geocoded locations.
 
 **Schema:**
+
 - `name`: Simple name used for API lookups (e.g. `"Bremerton"`, `"Bainbridge Island"`)
 - `display_name`: Human-readable name with neighborhood (e.g. `"Bremerton (Downtown)"`)
 - `address`: Full street address
@@ -23,6 +24,7 @@ Static list of Washington State Ferry terminals with geocoded locations.
 Synthetic tech events for demo and testing. Covers March–June 2026.
 
 **Schema:**
+
 - `title`, `description`, `location`, `topic`
 - `start_time`, `end_time`: ISO 8601 with timezone
 - `url`: Event page (optional)
@@ -30,6 +32,7 @@ Synthetic tech events for demo and testing. Covers March–June 2026.
 - `talk_title`: your talk title if presenting (optional)
 
 **Load with:**
+
 ```bash
 python setup/elasticsearch_setup.py --load-sample-data
 ```

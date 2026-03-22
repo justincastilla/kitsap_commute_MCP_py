@@ -15,6 +15,7 @@ Kitsap Commute Helper is a **three-server MCP application** that helps Kitsap Pe
 ### Configuration System
 
 All environment variables flow through **`config.py`**:
+
 - API keys: `WSDOT_API_KEY`, `GOOGLE_MAPS_API_KEY`
 - Elasticsearch: `ELASTIC_ENDPOINT`, `ELASTIC_API_KEY`, `EVENT_INDEX`
 - Kibana / Agent Builder: `KIBANA_URL`, `KIBANA_API_KEY`, `ELASTIC_AGENT_ID`
@@ -25,7 +26,7 @@ All environment variables flow through **`config.py`**:
 
 ### Data Files
 
-```
+```bash
 data/
 ├── ferry_terminals.json   # Static terminal locations (rarely changes)
 └── sample_events.json     # Synthetic demo events, March–June 2026
@@ -36,19 +37,23 @@ Ferry schedules are **not stored in a file** — `wsdot_server.py` calls the WSD
 ### MCP Server Structure
 
 **`wsdot_server.py`** exposes:
+
 - **1 Resource**: `get_terminals()` — static terminal list from `ferry_terminals.json`
 - **7 Tools**: `find_nearest_terminals`, `get_ferry_schedule`, `get_todays_sailings`, `get_ferry_fare`, `get_drive_time`, `estimate_total_travel`, `generate_expense_estimate`
 - **2 Prompts**: `user_preferences`, `plan_trip`
 
 **`events_write_server.py`** exposes:
+
 - **2 Tools**: `create_event`, `save_travel_plan`
 
 **`events_read_server.py`** exposes:
+
 - **1 Tool**: `search_events` — forwards natural language to Elastic Agent Builder converse API
 
 ### Elasticsearch
 
 The events index uses **`semantic_text`** for zero-config embeddings:
+
 - `description` has `copy_to: description_vector`
 - `description_vector` is `semantic_text` with `inference_id: jina-embeddings-v5`
 - EIS (Elastic Inference Service) handles embedding generation on ingest — no pipeline needed
@@ -115,6 +120,7 @@ def _generate_expense_estimate(...):
 ### Terminal Names
 
 `ferry_terminals.json` has two name fields:
+
 - `name` — simple name used for API lookups (`"Bremerton"`, `"Bainbridge Island"`)
 - `display_name` — human-readable (`"Bremerton (Downtown)"`)
 

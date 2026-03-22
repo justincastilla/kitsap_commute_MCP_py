@@ -7,14 +7,14 @@ A multi-server MCP application that helps Kitsap Peninsula residents plan ferry 
 Three FastMCP servers, each with a focused role:
 
 | Server | Purpose | Tools |
-|---|---|---|
+| --- | --- | --- |
 | `wsdot_server.py` | Live ferry data & travel estimates | `find_nearest_terminals`, `get_ferry_schedule`, `get_todays_sailings`, `get_ferry_fare`, `get_drive_time`, `estimate_total_travel`, `generate_expense_estimate` |
 | `events_write_server.py` | Create events & save travel plans | `create_event`, `save_travel_plan` |
 | `events_read_server.py` | AI-powered event search via Elastic Agent Builder | `search_events` |
 
 ## Project Structure
 
-```
+```bash
 kitsap-commute-helper/
 ├── wsdot_server.py            # MCP server: ferry schedules, fares, travel estimates
 ├── events_write_server.py     # MCP server: event creation and travel plan storage
@@ -55,7 +55,7 @@ cp .env.example .env
 
 Edit `.env`:
 
-```
+```bash
 WSDOT_API_KEY=your_key
 GOOGLE_MAPS_API_KEY=your_key
 
@@ -164,10 +164,12 @@ Replace `/path/to/kitsap-commute-helper` with the absolute path to your project 
 ### Event Management
 
 **Write (`events_write_server.py`):**
+
 - `create_event` — indexes a new event; `description` auto-embeds via EIS + jina-embeddings-v5
 - `save_travel_plan` — stores a full expense estimate on an event document, with optional `choice` field recording the route actually taken
 
 **Read (`events_read_server.py`):**
+
 - `search_events` — forwards natural language queries to Elastic Agent Builder, which runs ES|QL tools against the index and returns a natural language answer
 - Supports multi-turn conversation via `conversation_id`
 
@@ -175,7 +177,7 @@ Replace `/path/to/kitsap-commute-helper` with the absolute path to your project 
 
 `generate_expense_estimate` computes ferry fare + mileage for every viable route from your origin and returns a `travel_plan` object. `save_travel_plan` embeds that plan directly in the event document — no separate index needed.
 
-```
+```bash
 travel_plan
 ├── origin, destination, trip_date, calculated_at
 ├── recommended_route
