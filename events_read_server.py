@@ -33,6 +33,7 @@ def get_client() -> ElasticAgentClient:
         "Search the events index using natural language. The Elastic Agent interprets "
         "your query and runs the appropriate ES|QL tools internally. Ask things like "
         "'What tech events are coming up next month?' or 'Am I presenting anywhere in February?'."
+        "Don't just send raw query words, ask in natural language and let the agent know to search in the events index!"
     ),
 )
 def search_events(

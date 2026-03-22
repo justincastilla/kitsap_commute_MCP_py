@@ -10,6 +10,7 @@ from typing import Optional
 
 from fastmcp import FastMCP
 from elasticsearch import Elasticsearch
+import datetime
 from config import ELASTIC_ENDPOINT, ELASTIC_API_KEY, EVENT_INDEX
 
 logging.basicConfig(level=logging.INFO)
@@ -30,7 +31,6 @@ def create_event(
     title: str,
     description: str,
     location: str,
-    topic: str,
     start_time: str,
     end_time: str,
     url: Optional[str] = None,
@@ -44,7 +44,6 @@ def create_event(
         title: Event name.
         description: Full description — this drives semantic search.
         location: City, venue, or 'Remote'.
-        topic: Primary topic keyword (e.g. 'machine-learning', 'elasticsearch').
         start_time: ISO 8601 with timezone (e.g. '2026-04-10T18:00:00-07:00').
         end_time: ISO 8601 with timezone.
         url: Link to event page.
@@ -59,12 +58,12 @@ def create_event(
         "description": description,
         "description_vector": description,  # copy_to handled by index mapping
         "location": location,
-        "topic": topic,
         "start_time": start_time,
         "end_time": end_time,
         "url": url,
         "presenting": presenting,
         "talk_title": talk_title,
+        "created_at": datetime.datetime.now().isoformat(),
     }
     resp = es.index(index=EVENT_INDEX, document=doc)
     logger.info(f"Created event '{title}' with id {resp['_id']}")
