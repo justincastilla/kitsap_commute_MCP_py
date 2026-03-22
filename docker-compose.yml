@@ -1,26 +1,32 @@
 version: '3.8'
 
 services:
-  # Commute MCP Server
-  commute-server:
+  # WSDOT Ferry MCP Server
+  wsdot-server:
     build: .
-    container_name: kitsap-commute-server
+    container_name: kitsap-wsdot-server
     env_file:
       - .env
     stdin_open: true
     tty: true
-    command: ["python", "commute_server.py"]
-    ports:
-      - "8000:8000"
+    command: ["python", "wsdot_server.py"]
 
-  # Elasticsearch Event MCP Server
-  elasticsearch-server:
+  # Events Write MCP Server
+  events-write-server:
     build: .
-    container_name: kitsap-elasticsearch-server
+    container_name: kitsap-events-write-server
     env_file:
       - .env
     stdin_open: true
     tty: true
-    command: ["python", "elasticsearch_server.py"]
-    ports:
-      - "8001:8001"
+    command: ["python", "events_write_server.py"]
+
+  # Events Read MCP Server
+  events-read-server:
+    build: .
+    container_name: kitsap-events-read-server
+    env_file:
+      - .env
+    stdin_open: true
+    tty: true
+    command: ["python", "events_read_server.py"]

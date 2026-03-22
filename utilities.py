@@ -1,7 +1,5 @@
-import json
 from datetime import datetime
 from math import radians, cos, sin, sqrt, atan2
-from config import DATA_DIR
 
 
 def haversine(lat1, lon1, lat2, lon2):
@@ -42,13 +40,6 @@ def parse_datetime(dt: str | None) -> datetime | None:
         return datetime.fromisoformat(dt)
     except Exception:
         return None
-
-def get_schedule():
-    path = DATA_DIR / 'ferry_schedules.json'
-    with open(path, 'r') as f:
-        content = f.read()
-        content = '\n'.join([line for line in content.splitlines() if not line.strip().startswith('//')])
-    return json.loads(content)
 
 def to_epoch_seconds(dt):
     if hasattr(dt, 'timestamp'):

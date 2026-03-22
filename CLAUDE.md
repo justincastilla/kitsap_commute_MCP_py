@@ -4,67 +4,62 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Kitsap Commute Helper is a **dual MCP server application** that helps Kitsap County residents plan ferry/car commutes and manage events. It consists of two FastMCP servers that integrate with Claude Desktop:
+Kitsap Commute Helper is a **three-server MCP application** that helps Kitsap Peninsula residents plan ferry commutes, manage events, and track travel expenses. All servers run as stdio-based MCP servers for Claude Desktop.
 
-1. **`commute_server.py`** - Ferry schedules, driving times, route planning using WSDOT and Google Maps APIs
-2. **`elasticsearch_server.py`** - Event storage and semantic search using Elasticsearch with ML embeddings
-
-Both servers are designed to run as **stdio-based MCP servers** for Claude Desktop, not HTTP servers.
+1. **`wsdot_server.py`** — Live ferry schedules, fares, drive times, and expense estimates
+2. **`events_write_server.py`** — Create events and save travel plans to Elasticsearch
+3. **`events_read_server.py`** — Natural language event search via Elastic Agent Builder
 
 ## Core Architecture
 
 ### Configuration System
 
-All environment variables and settings flow through **`config.py`** (centralized configuration):
+All environment variables flow through **`config.py`**:
 - API keys: `WSDOT_API_KEY`, `GOOGLE_MAPS_API_KEY`
 - Elasticsearch: `ELASTIC_ENDPOINT`, `ELASTIC_API_KEY`, `EVENT_INDEX`
-- ML model settings: `EMBEDDING_MODEL_ID`, `INFERENCE_ENDPOINT_ID`, `PIPELINE_ID`
+- Kibana / Agent Builder: `KIBANA_URL`, `KIBANA_API_KEY`, `ELASTIC_AGENT_ID`
+- EIS model IDs: `INFERENCE_ENDPOINT_ID`, `RERANKER_ENDPOINT_ID`, `JINA_EMBEDDING_MODEL`, `JINA_RERANKER_MODEL`
 - Paths: `DATA_DIR`, `PROJECT_ROOT`
 
-**Important:** Never load `.env` directly in other files - always import from `config.py`.
+**Important:** Never call `os.getenv()` directly in server files — always import from `config.py`.
 
-### Data Architecture
+### Data Files
 
-Three categories of data files in `data/`:
+```
+data/
+├── ferry_terminals.json   # Static terminal locations (rarely changes)
+└── sample_events.json     # Synthetic demo events, March–June 2026
+```
 
-1. **Ferry Reference Data** (static, rarely changes):
-   - `ferry_terminals.json` - 7 terminals with geocoded locations
-   - `ferry_schedules.json` - Static schedules by route (weekday/weekend)
-
-2. **Sample Events** (test data):
-   - `sample_events.json` - Tech events for demo/testing (currently Dec 2025 - Feb 2026)
-
-3. **Deprecated** (backward compatibility):
-   - `elasticsearch_initialization.py` - Deprecated shim, use `setup/elasticsearch_setup.py`
+Ferry schedules are **not stored in a file** — `wsdot_server.py` calls the WSDOT Ferries API live on every request.
 
 ### MCP Server Structure
 
-Each server uses **FastMCP** decorators:
+**`wsdot_server.py`** exposes:
+- **1 Resource**: `get_terminals()` — static terminal list from `ferry_terminals.json`
+- **7 Tools**: `find_nearest_terminals`, `get_ferry_schedule`, `get_todays_sailings`, `get_ferry_fare`, `get_drive_time`, `estimate_total_travel`, `generate_expense_estimate`
+- **2 Prompts**: `user_preferences`, `plan_trip`
 
-**commute_server.py** exposes:
-- **2 Resources**: `fetch_ferry_schedules()`, `fetch_terminals()`
-- **4 Tools**: `find_nearby_ferry_terminals()`, `drive_time_tool()`, `get_ferry_times()`, `ferry_cost()`
-- **2 Prompts**: `user_preferences()`, `plan_trip()`
+**`events_write_server.py`** exposes:
+- **2 Tools**: `create_event`, `save_travel_plan`
 
-**elasticsearch_server.py** exposes:
-- **2 Tools**: `search_events()`, `create_event()`
+**`events_read_server.py`** exposes:
+- **1 Tool**: `search_events` — forwards natural language to Elastic Agent Builder converse API
 
-### Elasticsearch + ML Pipeline
+### Elasticsearch
 
-The event search uses **hybrid retrieval** with Reciprocal Rank Fusion (RRF):
-1. **Text search** - Multi-match across title/description/topic
-2. **Semantic search** - E5 multilingual embeddings via Elasticsearch ML inference
-3. **RRF fusion** - Combines both results with configurable rank constant
+The events index uses **`semantic_text`** for zero-config embeddings:
+- `description` has `copy_to: description_vector`
+- `description_vector` is `semantic_text` with `inference_id: jina-embeddings-v5`
+- EIS (Elastic Inference Service) handles embedding generation on ingest — no pipeline needed
 
-Events are indexed through an **ingest pipeline** that auto-generates `description_vector` embeddings.
+Kibana Agent Builder has 4 ES|QL tools: `search_upcoming_events`, `search_events_by_topic`, `search_events_by_date_range`, `get_my_presentations`.
 
 ## Development Commands
 
-### Running Locally (Without Docker)
-
 ```bash
 # Install dependencies
-pip install elasticsearch fastmcp pydantic python-dotenv requests
+pip install elasticsearch fastmcp pydantic python-dotenv requests httpx
 
 # Set up environment
 cp .env.example .env
@@ -73,165 +68,117 @@ cp .env.example .env
 # Initialize Elasticsearch (first time only)
 python setup/elasticsearch_setup.py --all
 
-# Run servers (in separate terminals)
-python commute_server.py
-python elasticsearch_server.py
-```
-
-### Running with Docker
-
-```bash
-# Build and start both MCP servers (Elasticsearch runs separately)
-docker-compose up --build
-
-# View logs
-docker-compose logs -f commute-server
-docker-compose logs -f elasticsearch-server
-
-# Stop services
-docker-compose down
-```
-
-**Note:** Docker setup runs the MCP servers in containers, but Elasticsearch must run separately (locally or cloud).
-
-### Elasticsearch Setup
-
-```bash
-# Run all setup steps at once
-python setup/elasticsearch_setup.py --all
-
-# Or run individually
-python setup/elasticsearch_setup.py --create-index
-python setup/elasticsearch_setup.py --create-endpoint
-python setup/elasticsearch_setup.py --create-pipeline
-python setup/elasticsearch_setup.py --load-sample-data
+# Run a server directly for testing
+python wsdot_server.py
 ```
 
 ### Claude Desktop Integration
 
-Add to `claude_desktop_config.json`:
-
 ```json
 {
   "mcpServers": {
-    "kitsap-commute": {
-      "command": "/Users/username/.pyenv/shims/python3",
-      "args": ["/path/to/kitsap-commute-helper/commute_server.py"]
+    "wsdot-ferry": {
+      "command": "/path/to/python3",
+      "args": ["/path/to/kitsap-commute-helper/wsdot_server.py"]
     },
-    "kitsap-events": {
-      "command": "/Users/username/.pyenv/shims/python3",
-      "args": ["/path/to/kitsap-commute-helper/elasticsearch_server.py"]
+    "events-write": {
+      "command": "/path/to/python3",
+      "args": ["/path/to/kitsap-commute-helper/events_write_server.py"]
+    },
+    "events-read": {
+      "command": "/path/to/python3",
+      "args": ["/path/to/kitsap-commute-helper/events_read_server.py"]
     }
   }
 }
 ```
 
-**Important:** Use full paths for both `command` (Python binary) and `args` (script path).
-
 ## Key Implementation Details
 
-### User Preferences (Commute Planning)
+### The `_helper` Pattern (FastMCP Gotcha)
 
-The `user_preferences` prompt defines default behavior:
-- Always provide **exactly 3 route options**
-- One option **must be driving-only** (no ferry)
-- Other 2 options are ferry + driving combinations
-- Arrival: 15 minutes before event time
-- Display in table format
+`@mcp.tool()` replaces the decorated function with a `FunctionTool` object — not directly callable from Python. Any tool that needs to be called from other Python code must have a private `_helper` function:
 
-Reference this prompt when modifying route planning logic.
-
-### Ferry Route Keys
-
-Routes are keyed as `"{origin}-{destination}"` (lowercase) in `ferry_schedules.json`:
-- Example: `"bremerton-seattle"`
-- Each route has `direction`, `weekday`, `weekend` arrays
-
-### Cost Calculations
-
-**Mileage Cost** (`drive_time_tool`):
-- **Rate**: $0.77 per mile (hardcoded constant)
-- Automatically calculated for all driving routes
-- Returns `mileage_cost`, `distance_miles`, and `cost_summary` fields
-- Uses Google Maps distance in meters, converted to miles: `distance_meters * 0.000621371`
-
-**Ferry Fares** (`ferry_cost`):
-- **WSDOT Fares API**: Calls official WSDOT API for real-time ferry pricing
-- **Terminal mapping**: Translates terminal names to IDs (e.g., "Southworth" → 20)
-- **Travel modes**: "walk" (passenger only) or "drive" (vehicle + driver)
-- **Vehicle sizes**: "standard" (under 22'), "small" (under 14'), "motorcycle"
-- **WA Ferry Pricing Rule**:
-  - Eastbound (to mainland) = PAID
-  - Westbound (to islands) = FREE
-  - Examples: Seattle→Bainbridge is FREE, Bainbridge→Seattle is PAID
-- **Fallback logic**: If exact fare not found, searches for reasonable default
-- Returns `fare_amount`, `fare_name`, `cost_summary` fields
-
-**Terminal ID Mapping** (hardcoded in `ferry_cost`):
 ```python
-terminal_mapping = {
-    "seattle": 7, "bainbridge island": 3, "southworth": 20,
-    "fauntleroy": 9, "edmonds": 8, "kingston": 12,
-    "bremerton": 4, "point defiance": 16, "tahlequah": 21,
-    # ... plus San Juan Islands terminals
+def _get_ferry_fare(trip_date, dep, arr, mode):   # contains logic
+    ...
+
+@mcp.tool(name="get_ferry_fare")
+def get_ferry_fare(trip_date, dep, arr, mode):    # thin wrapper
+    return _get_ferry_fare(trip_date, dep, arr, mode)
+
+# Other functions call the helper, never the tool
+def _generate_expense_estimate(...):
+    fare = _get_ferry_fare(...)                    # ✓ correct
+```
+
+### Terminal Names
+
+`ferry_terminals.json` has two name fields:
+- `name` — simple name used for API lookups (`"Bremerton"`, `"Bainbridge Island"`)
+- `display_name` — human-readable (`"Bremerton (Downtown)"`)
+
+`_find_nearest_terminals` returns `name` (not `display_name`) so that `TERMINAL_PAIRS` and `TERMINAL_IDS` lookups work correctly.
+
+### Terminal Pairs
+
+`TERMINAL_PAIRS` in `wsdot_server.py` maps each Kitsap-side terminal to its correct mainland counterpart. This replaces any destination-guessing logic:
+
+```python
+TERMINAL_PAIRS = {
+    "southworth":        "fauntleroy",   # West Seattle, NOT downtown
+    "bainbridge island": "seattle",
+    "bremerton":         "seattle",
+    "kingston":          "edmonds",
+    "tahlequah":         "point defiance",
 }
 ```
 
-### Southworth Ferry Special Case
+### Cost Calculations
 
-When planning routes to Seattle:
-- Southworth ferry goes to **Fauntleroy (West Seattle)**, NOT downtown
-- If destination is downtown Seattle, must add drive time from Fauntleroy
-- This is documented in the `how_to_plan_a_trip` prompt
+**Mileage**: `$0.70/mile` (IRS standard rate), Google Maps distance in meters × `0.000621371`
 
-### Haversine Distance Calculation
+**Ferry fares**: Live WSDOT Fares API. Eastbound (to mainland) = paid, westbound (to islands) = free.
 
-`utilities.haversine()` calculates great-circle distance in kilometers. Used for:
-- Finding nearest ferry terminals
-- Sorting terminals by distance from origin
+**Crossing times**: Hardcoded in `CROSSING_TIMES` (frozenset keys) — the WSDOT schedule API does not return a crossing time field.
 
-### Date/Time Handling
+### Travel Plans
 
-- All event times use **ISO 8601 format** with timezone (e.g., `2025-12-03T18:00:00-08:00`)
-- Winter months (Dec-Feb) use PST (`-08:00`), summer uses PDT (`-07:00`)
-- `utilities.get_day_type()` returns `'weekday'` or `'weekend'` for ferry schedule lookups
+`generate_expense_estimate` returns a `travel_plan` dict. `save_travel_plan` embeds it directly in the event document (no separate index). The `choice` sub-object records the route actually taken:
 
-### Elasticsearch Embedding Dimension
-
-The E5-small model generates **384-dimensional vectors**. This is hardcoded in `config.py`:
 ```python
-EMBEDDING_DIM = 384  # E5-small default
+travel_plan = {
+    "origin": ..., "destination": ..., "trip_date": ...,
+    "recommended_route": ...,
+    "choice": {"route": ..., "total_cost": ...},  # optional, set at save time
+    "routes": [...]
+}
 ```
 
-If changing the embedding model, update this constant AND the index mapping.
+### Elastic Agent Builder
+
+`events_read_server.py` wraps `ElasticAgentClient.chat()` from `elastic_agent_example.py`. The client POSTs to `{KIBANA_URL}/api/agent_builder/converse` with `{input, agent_id, conversation_id}`. ES|QL tools are registered in Kibana separately via `setup/elasticsearch_setup.py --create-tools`.
 
 ## Common Pitfalls
 
-1. **Duplicate function names**: The branch had two functions named `plan_a_trip2()`. These are now `plan_trip_basic()` and `plan_trip_detailed()`.
+1. **`FunctionTool` not callable**: Use the `_helper` pattern — see above.
 
-2. **Import order**: Always import from `config.py` before using environment variables. Never use `os.getenv()` directly in server files.
+2. **Terminal name mismatch**: Always use the `name` field (not `display_name`) from terminal data for TERMINAL_PAIRS/TERMINAL_IDS lookups.
 
-3. **Ferry schedules are static**: The current implementation uses static JSON schedules. For real-time data, integrate with WSDOT's live API.
+3. **Southworth → Fauntleroy**: Southworth goes to Fauntleroy (West Seattle), not downtown Seattle. The `user_preferences` prompt reminds the LLM of this, and `TERMINAL_PAIRS` enforces it in code.
 
-4. **Elasticsearch must be running**: Both the setup scripts and the elasticsearch_server.py require a running Elasticsearch instance. The servers will fail silently if ES is unreachable.
+4. **WSDOT schedule response structure**: Times are at `data["TerminalCombos"][0]["Times"]`, not `data["Times"]`. Times use `/Date(milliseconds+offset)/` format.
 
-5. **Sample events are in the future**: When testing, remember that `sample_events.json` contains events in Dec 2025 - Feb 2026.
+5. **Import order**: Always import from `config.py`. Never use `os.getenv()` directly in server files.
 
-## File Migration Notes
-
-The codebase recently underwent reorganization:
-
-- **Old**: `data/elasticsearch_initialization.py` (299 lines, mixed setup + operations)
-- **New**: `setup/elasticsearch_setup.py` (clean setup functions only)
-- **Compatibility**: The old file is now a deprecation shim
-
-When adding Elasticsearch setup functionality, modify `setup/elasticsearch_setup.py`, not the deprecated file.
+6. **Elasticsearch must be reachable**: Servers will fail at startup if ES is unreachable (for write/read servers).
 
 ## API Keys Required
 
-- **WSDOT_API_KEY** - Washington State DOT ferry API access
-- **GOOGLE_MAPS_API_KEY** - Geocoding and directions API
-- **ELASTIC_API_KEY** - Optional for local Elasticsearch, required for Elastic Cloud
-- **ELASTIC_ENDPOINT** - Defaults to `http://localhost:9200`
+- `WSDOT_API_KEY` — Washington State DOT ferry API
+- `GOOGLE_MAPS_API_KEY` — Geocoding and Directions APIs
+- `ELASTIC_API_KEY` — Elastic Cloud Serverless
+- `KIBANA_API_KEY` — Kibana Agent Builder access
+- `ELASTIC_AGENT_ID` — ID of the Agent Builder agent with ES|QL tools
 
-All keys go in `.env` file (never commit this file).
+All keys go in `.env` (never commit this file).

@@ -6,13 +6,16 @@ WORKDIR /app
 RUN pip install --no-cache-dir \
     elasticsearch>=9.0.2 \
     fastmcp>=2.10.4 \
+    httpx>=0.27.0 \
     pydantic>=2.11.7 \
     python-dotenv>=1.1.1 \
     requests>=2.32.4
 
 # Copy application files
-COPY commute_server.py .
-COPY elasticsearch_server.py .
+COPY wsdot_server.py .
+COPY events_read_server.py .
+COPY events_write_server.py .
+COPY elastic_agent_example.py .
 COPY utilities.py .
 COPY config.py .
 COPY data/ data/
@@ -22,4 +25,4 @@ COPY setup/ setup/
 ENV PYTHONUNBUFFERED=1
 
 # Default command (can be overridden in docker-compose)
-CMD ["python", "commute_server.py"]
+CMD ["python", "wsdot_server.py"]
